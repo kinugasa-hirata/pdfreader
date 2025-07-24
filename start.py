@@ -16,6 +16,34 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+def ensure_japanese_text(text):
+    """Ensure text is properly encoded for Japanese characters"""
+    if isinstance(text, str):
+        try:
+            # Test if text can be encoded/decoded properly
+            text.encode('utf-8').decode('utf-8')
+            return text
+        except UnicodeError:
+            # If there's an encoding issue, try to fix it
+            return text.encode('utf-8', errors='replace').decode('utf-8')
+    return str(text)
+
+def convert_df_to_csv(df, encoding='utf-8-sig'):
+    """Convert DataFrame to CSV string with proper Japanese encoding"""
+    try:
+        # Try the specified encoding first
+        csv_string = df.to_csv(index=False, encoding=encoding, errors='replace')
+        return csv_string
+    except UnicodeEncodeError:
+        try:
+            # Fallback to UTF-8 without BOM
+            csv_string = df.to_csv(index=False, encoding='utf-8', errors='replace')
+            return csv_string
+        except:
+            # Final fallback to Shift-JIS for Japanese systems
+            csv_string = df.to_csv(index=False, encoding='shift_jis', errors='replace')
+            return csv_string
+
 class CMMDataParser:
     def __init__(self):
         self.measurement_data = []
@@ -39,14 +67,18 @@ class CMMDataParser:
             return value
         
     def extract_pdf_text(self, file_content):
-        """Extract text from PDF file"""
+        """Extract text from PDF file with proper Japanese encoding"""
         try:
             pdf_file = io.BytesIO(file_content)
             pdf_reader = PyPDF2.PdfReader(pdf_file)
             
             text = ""
             for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
+                page_text = page.extract_text()
+                # Ensure Japanese text is properly handled
+                if page_text:
+                    page_text = ensure_japanese_text(page_text)
+                    text += page_text + "\n"
             
             return text
         except Exception as e:
@@ -154,11 +186,16 @@ class CMMDataParser:
         detailed_data = []
         
         for element in self.measurement_data:
+            # Ensure Japanese text is properly encoded
+            element_name = ensure_japanese_text(element['name'])
+            element_type = ensure_japanese_text(element['type'])
+            element_side = ensure_japanese_text(element.get('side', 'N/A'))
+            
             base_info = {
-                '要素名': element['name'],
-                'タイプ': element['type'],
+                '要素名': element_name,
+                'タイプ': element_type,
                 '点数': element.get('point_count', 'N/A'),
-                '側面': element.get('side', 'N/A')
+                '側面': element_side
             }
             
             if 'statistics' in element:
@@ -180,9 +217,14 @@ class CMMDataParser:
                 for coord_name, coord_data in element['coordinates'].items():
                     row = base_info.copy()
                     within_tolerance = coord_data['lower_tol'] <= coord_data['deviation'] <= coord_data['upper_tol']
+                    
+                    # Ensure coordinate name and axis are properly encoded
+                    coord_name_clean = ensure_japanese_text(coord_name)
+                    coord_axis_clean = ensure_japanese_text(coord_data['axis'])
+                    
                     row.update({
-                        '座標名': coord_name,
-                        '軸': coord_data['axis'],
+                        '座標名': coord_name_clean,
+                        '軸': coord_axis_clean,
                         '実測値': coord_data['measured'],
                         '基準値': coord_data['reference'],
                         '上限公差': coord_data['upper_tol'],
@@ -196,20 +238,21 @@ class CMMDataParser:
         
         return pd.DataFrame(detailed_data)
 
-def convert_df_to_csv(df):
-    """Convert DataFrame to CSV string"""
-    return df.to_csv(index=False, encoding='utf-8-sig')
-
-# Title and description - MOVED OUTSIDE OF MAIN FUNCTION
-st.title("Zeiss社測定レポート解析アプリ sponsored by 株式会社平田商店")
+# Title and description - Preserving your custom title
+st.markdown("# Zeiss社測定レポート解析アプリ\nsponsored by 株式会社平田商店")
 st.markdown("**Carl Zeiss CALYPSO レポート解析器**")
 
-# Sidebar - MOVED OUTSIDE OF MAIN FUNCTION
+# Sidebar - Preserving your simplified sidebar
 with st.sidebar:
     st.header("使い方")
     st.markdown("1. PDFファイルをアップロード")
     st.markdown("2. ファイル処理開始をクリックしてデータを解析処理")
     st.markdown("3. CSVレポートをダウンロード")
+    
+    st.header("📊 機能")
+    st.markdown("- 詳細解析データ")
+    st.markdown("- 絶対値変換済み")
+    st.markdown("- 日本語対応エンコーディング")
 
 # File upload
 st.header("📁 ファイルアップロード")
@@ -269,17 +312,71 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
     # Display the dataframe
     st.dataframe(detailed_df, use_container_width=True)
     
-    # Download button
+    # Generate timestamp for filenames
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    detailed_filename = f"CMM詳細データ_{timestamp}.csv"
     
-    st.download_button(
-        label="📥 詳細データCSVダウンロード",
-        data=convert_df_to_csv(detailed_df),
-        file_name=detailed_filename,
-        mime="text/csv",
-        type="primary",
-    )
+    # Multiple download options for Japanese encoding
+    st.subheader("📥 CSVダウンロード")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        # UTF-8 with BOM (Excel compatible)
+        try:
+            csv_utf8_bom = convert_df_to_csv(detailed_df, 'utf-8-sig')
+            st.download_button(
+                label="📥 Excel推奨 (UTF-8 BOM)",
+                data=csv_utf8_bom,
+                file_name=f"CMM詳細データ_Excel_{timestamp}.csv",
+                mime="text/csv",
+                type="primary",
+                help="Microsoft Excel で日本語を正しく表示"
+            )
+        except Exception as e:
+            st.error(f"UTF-8 BOM エラー: {e}")
+    
+    with col2:
+        # UTF-8 without BOM
+        try:
+            csv_utf8 = convert_df_to_csv(detailed_df, 'utf-8')
+            st.download_button(
+                label="📥 標準 (UTF-8)",
+                data=csv_utf8,
+                file_name=f"CMM詳細データ_標準_{timestamp}.csv",
+                mime="text/csv",
+                help="Google Sheets, LibreOffice 向け"
+            )
+        except Exception as e:
+            st.error(f"UTF-8 エラー: {e}")
+    
+    with col3:
+        # Shift-JIS for Japanese systems
+        try:
+            csv_sjis = convert_df_to_csv(detailed_df, 'shift_jis')
+            st.download_button(
+                label="📥 日本語システム (Shift-JIS)",
+                data=csv_sjis,
+                file_name=f"CMM詳細データ_日本語_{timestamp}.csv",
+                mime="text/csv",
+                help="日本語システム向け"
+            )
+        except Exception as e:
+            st.warning("Shift-JIS エンコーディングは利用できません")
+    
+    # Encoding help section
+    with st.expander("❓ どのファイルをダウンロードすればよいですか？"):
+        st.markdown("""
+        **推奨ダウンロード:**
+        
+        - **📊 Microsoft Excel を使用** → Excel推奨 (UTF-8 BOM)
+        - **📈 Google Sheets を使用** → 標準 (UTF-8)  
+        - **🇯🇵 古い日本語システム** → 日本語システム (Shift-JIS)
+        
+        **文字化けする場合:**
+        1. 異なるエンコーディングのファイルを試してください
+        2. Excel の場合：データ > テキストから > エンコーディング選択
+        3. メモ帳で開いて日本語が正しく表示されるか確認してください
+        """)
     
     # Show data preview
     with st.expander("📄 データプレビュー（最初の10行）"):
