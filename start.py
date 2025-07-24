@@ -22,89 +22,6 @@ class CMMDataParser:
         self.coordinate_system_data = {}
         self.reference_elements = {}
         
-        # Translation dictionary for Japanese to English
-        # self.japanese_to_english = {
-        #     # Element types
-        #     '円': 'Circle',
-        #     '平面': 'Plane', 
-        #     '線': 'Line',
-        #     '基準円': 'Reference_Circle',
-        #     '直線': 'Line',
-            
-        #     # Sides and positions
-        #     '内側': 'Inside',
-        #     '外側': 'Outside',
-            
-        #     # Common measurement terms
-        #     'ロハ': 'RoHa',
-        #     'イロ': 'IrO', 
-        #     'ハニ': 'HaNi',
-        #     'イニ': 'IniNi',
-        #     'ニ': 'Ni',
-        #     'ロ': 'Ro',
-        #     'ハ': 'Ha',
-        #     'イ': 'I',
-            
-        #     # Coordinate system terms
-        #     '基本座標系': 'Basic_Coordinate_System',
-        #     'ﾃﾞｰﾀﾑ': 'Datum',
-        #     '座標系': 'Coordinate_System',
-            
-        #     # Common prefixes
-        #     '基準': 'Reference',
-        #     '測定': 'Measurement',
-        #     '点数': 'Point_Count',
-            
-        #     # Numbers in Japanese context
-        #     '１': '1', '２': '2', '３': '3', '４': '4', '５': '5',
-        #     '６': '6', '７': '7', '８': '8', '９': '9', '０': '0',
-            
-        #     # Additional common terms
-        #     '値': 'Value',
-        #     '軸': 'Axis',
-        #     '形状': 'Form',
-        #     '公差': 'Tolerance',
-        #     '偏差': 'Deviation',
-        # }
-    
-    def translate_japanese_to_english(self, text):
-        """Translate Japanese text to English alphabets"""
-        if not isinstance(text, str):
-            return text
-            
-        # Handle None or empty strings
-        if not text or text == 'N/A':
-            return text
-            
-        translated = text
-        
-        # Apply translations
-        for japanese, english in self.japanese_to_english.items():
-            translated = translated.replace(japanese, english)
-        
-        # Convert specific patterns
-        patterns = [
-            (r'Circle(\d+)', r'Circle_\1'),
-            (r'Plane(\d+)', r'Plane_\1'),
-            (r'Reference_Circle(\d+)', r'Ref_Circle_\1'),
-            (r'([A-Za-z]+)線', r'\1_Line'),
-            (r'([XYZ])-値_', r'\1_Value_'),
-        ]
-        
-        for pattern, replacement in patterns:
-            translated = re.sub(pattern, replacement, translated)
-        
-        # Remove any remaining Japanese characters and replace with placeholders
-        # This catches any characters we didn't explicitly translate
-        result = ""
-        for char in translated:
-            if ord(char) > 127:  # Non-ASCII character
-                result += "X"  # Replace with X as placeholder
-            else:
-                result += char
-                
-        return result
-        
     def convert_to_absolute(self, value):
         """Convert numerical value to absolute value"""
         try:
@@ -175,11 +92,11 @@ class CMMDataParser:
                     if current_element:
                         self.measurement_data.append(current_element)
                     
-                    # Translate Japanese element names to English
-                    element_name = self.translate_japanese_to_english(parsed_line['match'].group(1))
+                    # Keep original Japanese element names
+                    element_name = parsed_line['match'].group(1)
                     element_side = None
                     if len(parsed_line['match'].groups()) >= 3 and parsed_line['match'].group(3):
-                        element_side = self.translate_japanese_to_english(parsed_line['match'].group(3))
+                        element_side = parsed_line['match'].group(3)
                     
                     current_element = {
                         'name': element_name,
@@ -193,9 +110,9 @@ class CMMDataParser:
                 
                 elif parsed_line['type'] == 'coordinate_value' and current_element:
                     match = parsed_line['match']
-                    # Translate coordinate names to English
-                    coord_name = self.translate_japanese_to_english(match.group(1))
-                    coord_axis = match.group(2)  # X, Y, Z are already English
+                    # Keep original coordinate names
+                    coord_name = match.group(1)
+                    coord_axis = match.group(2)  # X, Y, Z
                     measured_value = self.convert_to_absolute(float(match.group(3)))
                     reference_value = self.convert_to_absolute(float(match.group(4)))
                     upper_tolerance = self.convert_to_absolute(float(match.group(5)))
@@ -228,16 +145,14 @@ class CMMDataParser:
                     }
             
             if '基本座標系' in line:
-                # Translate coordinate system info to English
-                translated_line = self.translate_japanese_to_english(line)
-                self.coordinate_system_data['name'] = translated_line
+                # Keep original coordinate system info
+                self.coordinate_system_data['name'] = line
                 for j in range(i+1, min(i+10, len(lines))):
                     datum_line = lines[j].strip()
                     if 'ﾃﾞｰﾀﾑ' in datum_line:
                         if 'datums' not in self.coordinate_system_data:
                             self.coordinate_system_data['datums'] = []
-                        translated_datum = self.translate_japanese_to_english(datum_line)
-                        self.coordinate_system_data['datums'].append(translated_datum)
+                        self.coordinate_system_data['datums'].append(datum_line)
         
         if current_element:
             self.measurement_data.append(current_element)
@@ -247,10 +162,10 @@ class CMMDataParser:
         detailed_data = []
         
         for element in self.measurement_data:
-            # Ensure all text is translated to English
-            element_name = self.translate_japanese_to_english(element['name'])
-            element_type = element['type']  # Already English from parsing
-            element_side = self.translate_japanese_to_english(element.get('side', 'N/A')) if element.get('side') else 'N/A'
+            # Keep original Japanese text
+            element_name = element['name']
+            element_type = element['type']
+            element_side = element.get('side', 'N/A') if element.get('side') else 'N/A'
             
             base_info = {
                 'Element_Name': element_name,
@@ -279,12 +194,12 @@ class CMMDataParser:
                     row = base_info.copy()
                     within_tolerance = coord_data['lower_tol'] <= coord_data['deviation'] <= coord_data['upper_tol']
                     
-                    # Translate coordinate names to English
-                    coord_name_english = self.translate_japanese_to_english(coord_name)
+                    # Keep original coordinate names
+                    coord_name_original = coord_name
                     
                     row.update({
-                        'Coordinate_Name': coord_name_english,
-                        'Axis': coord_data['axis'],  # X, Y, Z already English
+                        'Coordinate_Name': coord_name_original,
+                        'Axis': coord_data['axis'],
                         'Measured_Value': coord_data['measured'],
                         'Reference_Value': coord_data['reference'],
                         'Upper_Tolerance': coord_data['upper_tol'],
@@ -314,7 +229,7 @@ with st.sidebar:
     
 # File upload
 st.header("PDFファイルをアップロード")
-uploaded_file = st.file_uploader(type="pdf", label="📥 Upload PDF File",)
+uploaded_file = st.file_uploader(type="pdf", label="PDFファイルをアップロード",)
 
 if uploaded_file is not None:
     # Show file details
@@ -346,18 +261,18 @@ if uploaded_file is not None:
 if hasattr(st.session_state, 'processed') and st.session_state.processed:
     parser = st.session_state.parser
     
-    st.subheader("Detailed Analysis Data")
+    st.subheader("解析データ")
     detailed_df = parser.create_detailed_dataframe()
     
-    # Show data info
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Data Rows", len(detailed_df))
-    with col2:
-        st.metric("Data Columns", len(detailed_df.columns))
-    with col3:
-        ok_count = len(detailed_df[detailed_df.get('Within_Tolerance', 'N/A') == 'OK']) if 'Within_Tolerance' in detailed_df.columns else 0
-        st.metric("Within Tolerance", ok_count)
+    # # Show data info
+    # col1, col2, col3 = st.columns(3)
+    # with col1:
+    #     st.metric("Data Rows", len(detailed_df))
+    # with col2:
+    #     st.metric("Data Columns", len(detailed_df.columns))
+    # with col3:
+    #     ok_count = len(detailed_df[detailed_df.get('Within_Tolerance', 'N/A') == 'OK']) if 'Within_Tolerance' in detailed_df.columns else 0
+    #     st.metric("Within Tolerance", ok_count)
     
     # Display the dataframe
     st.dataframe(detailed_df, use_container_width=True)
@@ -375,5 +290,5 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
     )
     
     # Show data preview
-    with st.expander("📄 Data Preview (First 10 rows)"):
+    with st.expander("📄 Data Preview (irst 10 rows)"):
         st.dataframe(detailed_df.head(10))
