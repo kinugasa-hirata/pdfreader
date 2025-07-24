@@ -256,57 +256,6 @@ if uploaded_file is not None:
 if hasattr(st.session_state, 'processed') and st.session_state.processed:
     parser = st.session_state.parser
     
-    # Overview
-    st.header("📊 解析概要")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("総要素数", len(parser.measurement_data))
-    
-    with col2:
-        type_counts = {}
-        for element in parser.measurement_data:
-            element_type = element['type']
-            type_counts[element_type] = type_counts.get(element_type, 0) + 1
-        st.metric("要素タイプ数", len(type_counts))
-    
-    with col3:
-        total_coordinates = sum(len(element.get('coordinates', {})) for element in parser.measurement_data)
-        st.metric("座標数", total_coordinates)
-    
-    with col4:
-        if parser.coordinate_system_data:
-            datum_count = len(parser.coordinate_system_data.get('datums', []))
-            st.metric("データム数", datum_count)
-    
-    # Element type breakdown
-    if type_counts:
-        st.subheader("🔍 要素タイプ別内訳")
-        # Translate type names to Japanese
-        japanese_types = {
-            'circle': '円',
-            'plane': '平面', 
-            'line': '直線'
-        }
-        
-        translated_counts = {}
-        for eng_type, count in type_counts.items():
-            jp_type = japanese_types.get(eng_type, eng_type)
-            translated_counts[jp_type] = count
-            
-        type_df = pd.DataFrame(list(translated_counts.items()), columns=['タイプ', '数量'])
-        st.bar_chart(type_df.set_index('タイプ'))
-    
-    # Coordinate system info
-    if parser.coordinate_system_data:
-        st.subheader("🎯 座標系")
-        st.info(f"**名前:** {parser.coordinate_system_data.get('name', 'N/A')}")
-        if 'datums' in parser.coordinate_system_data:
-            with st.expander("データム一覧"):
-                for i, datum in enumerate(parser.coordinate_system_data['datums']):
-                    st.write(f"**データム {i+1}:** {datum}")
-    
     # Data table - Only detailed view
     st.header("📋 測定データ（詳細）")
     
@@ -336,7 +285,6 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
         file_name=detailed_filename,
         mime="text/csv",
         type="primary",
-        help="絶対値変換済みの詳細測定データをCSVファイルとしてダウンロードします"
     )
     
     # Show data preview
@@ -353,8 +301,3 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
         if 'parser' in st.session_state:
             del st.session_state.parser
         st.rerun()
-
-# Footer
-st.markdown("---")
-st.markdown("**CMM データパーサー v1.0** | Streamlit で構築 🚀")
-st.markdown("💡 **機能:** 全数値データは絶対値に変換されています（負の値 → 正の値）")
