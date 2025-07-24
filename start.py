@@ -23,49 +23,49 @@ class CMMDataParser:
         self.reference_elements = {}
         
         # Translation dictionary for Japanese to English
-        self.japanese_to_english = {
-            # Element types
-            '円': 'Circle',
-            '平面': 'Plane', 
-            '線': 'Line',
-            '基準円': 'Reference_Circle',
-            '直線': 'Line',
+        # self.japanese_to_english = {
+        #     # Element types
+        #     '円': 'Circle',
+        #     '平面': 'Plane', 
+        #     '線': 'Line',
+        #     '基準円': 'Reference_Circle',
+        #     '直線': 'Line',
             
-            # Sides and positions
-            '内側': 'Inside',
-            '外側': 'Outside',
+        #     # Sides and positions
+        #     '内側': 'Inside',
+        #     '外側': 'Outside',
             
-            # Common measurement terms
-            'ロハ': 'RoHa',
-            'イロ': 'IrO', 
-            'ハニ': 'HaNi',
-            'イニ': 'IniNi',
-            'ニ': 'Ni',
-            'ロ': 'Ro',
-            'ハ': 'Ha',
-            'イ': 'I',
+        #     # Common measurement terms
+        #     'ロハ': 'RoHa',
+        #     'イロ': 'IrO', 
+        #     'ハニ': 'HaNi',
+        #     'イニ': 'IniNi',
+        #     'ニ': 'Ni',
+        #     'ロ': 'Ro',
+        #     'ハ': 'Ha',
+        #     'イ': 'I',
             
-            # Coordinate system terms
-            '基本座標系': 'Basic_Coordinate_System',
-            'ﾃﾞｰﾀﾑ': 'Datum',
-            '座標系': 'Coordinate_System',
+        #     # Coordinate system terms
+        #     '基本座標系': 'Basic_Coordinate_System',
+        #     'ﾃﾞｰﾀﾑ': 'Datum',
+        #     '座標系': 'Coordinate_System',
             
-            # Common prefixes
-            '基準': 'Reference',
-            '測定': 'Measurement',
-            '点数': 'Point_Count',
+        #     # Common prefixes
+        #     '基準': 'Reference',
+        #     '測定': 'Measurement',
+        #     '点数': 'Point_Count',
             
-            # Numbers in Japanese context
-            '１': '1', '２': '2', '３': '3', '４': '4', '５': '5',
-            '６': '6', '７': '7', '８': '8', '９': '9', '０': '0',
+        #     # Numbers in Japanese context
+        #     '１': '1', '２': '2', '３': '3', '４': '4', '５': '5',
+        #     '６': '6', '７': '7', '８': '8', '９': '9', '０': '0',
             
-            # Additional common terms
-            '値': 'Value',
-            '軸': 'Axis',
-            '形状': 'Form',
-            '公差': 'Tolerance',
-            '偏差': 'Deviation',
-        }
+        #     # Additional common terms
+        #     '値': 'Value',
+        #     '軸': 'Axis',
+        #     '形状': 'Form',
+        #     '公差': 'Tolerance',
+        #     '偏差': 'Deviation',
+        # }
     
     def translate_japanese_to_english(self, text):
         """Translate Japanese text to English alphabets"""
@@ -304,7 +304,6 @@ def convert_df_to_csv(df):
 
 # Title and description - Your custom title
 st.markdown("# Zeiss社pdf出力データ解析アプリ\nmade by Hirata Trading Co., Ltd.")
-st.markdown("**Carl Zeiss CALYPSO Report Analyzer**")
 
 # Sidebar
 with st.sidebar:
