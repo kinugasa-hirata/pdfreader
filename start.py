@@ -303,7 +303,7 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False, encoding='utf-8-sig')
 
 # Title and description - Your custom title
-st.markdown("# Zeiss CMM Data Parser\nsponsored by Hirata Trading Co., Ltd.")
+st.markdown("# Zeiss社pdf出力データ解析アプリ\nmade by Hirata Trading Co., Ltd.")
 st.markdown("**Carl Zeiss CALYPSO Report Analyzer**")
 
 # Sidebar
@@ -314,21 +314,16 @@ with st.sidebar:
     st.markdown("3. CSVファイルをダウンロード")
     
 # File upload
-st.header("PDFファイルをアプロー")
-uploaded_file = st.file_uploader(
-    "Choose a PDF file",
-    type="pdf",
-    help="Upload your Carl Zeiss CALYPSO measurement report (PDF format)"
-)
+st.header("PDFファイルをアップロード")
+uploaded_file = st.file_uploader(type="pdf", label="📥 Upload PDF File",)
 
 if uploaded_file is not None:
     # Show file details
-    st.success(f"✅ File uploaded: {uploaded_file.name}")
-    st.info(f"📄 File size: {uploaded_file.size} bytes")
+    st.success(f"✅ ファイルのアップロードが完了しました: {uploaded_file.name}")
     
     # Process button
     if st.button("🔄 Process File", type="primary"):
-        with st.spinner("Processing PDF file..."):
+        with st.spinner("ファイルを処理しています..."):
             # Initialize parser
             parser = CMMDataParser()
             
@@ -344,16 +339,13 @@ if uploaded_file is not None:
                 st.session_state.parser = parser
                 st.session_state.processed = True
                 
-                st.success("✅ File processed successfully!")
+                st.success("✅ ファイル処理が完了しました!")
             else:
                 st.error("❌ Failed to extract text from PDF")
 
 # Display results if processed
 if hasattr(st.session_state, 'processed') and st.session_state.processed:
     parser = st.session_state.parser
-    
-    # Data table - Only detailed view
-    st.header("📋 Measurement Data (Detailed)")
     
     st.subheader("Detailed Analysis Data")
     detailed_df = parser.create_detailed_dataframe()
@@ -376,7 +368,7 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
     detailed_filename = f"CMM_Detailed_Data_{timestamp}.csv"
     
     st.download_button(
-        label="📥 Download Detailed Data CSV",
+        label="CSVデータをダウンロードします",
         data=convert_df_to_csv(detailed_df),
         file_name=detailed_filename,
         mime="text/csv",
