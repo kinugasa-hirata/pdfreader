@@ -201,21 +201,15 @@ def convert_df_to_csv(df):
     return df.to_csv(index=False, encoding='utf-8-sig')
 
 # Title and description - MOVED OUTSIDE OF MAIN FUNCTION
-st.title("📐 CMM データパーサー")
+st.title("Zeiss社測定レポート解析アプリ sponsored by 株式会社平田商店")
 st.markdown("**Carl Zeiss CALYPSO レポート解析器**")
-st.markdown("CMM測定PDFレポートをアップロードして、データを解析・分析してください。")
 
 # Sidebar - MOVED OUTSIDE OF MAIN FUNCTION
 with st.sidebar:
-    st.header("📋 ナビゲーション")
+    st.header("使い方")
     st.markdown("1. PDFファイルをアップロード")
-    st.markdown("2. 解析データを確認")
+    st.markdown("2. ファイル処理開始をクリックしてデータを解析処理")
     st.markdown("3. CSVレポートをダウンロード")
-    
-    st.header("📊 エクスポート機能")
-    st.markdown("- 詳細解析データ")
-    st.markdown("- 座標系情報")
-    st.markdown("- 絶対値変換済み")
 
 # File upload
 st.header("📁 ファイルアップロード")
@@ -290,14 +284,3 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
     # Show data preview
     with st.expander("📄 データプレビュー（最初の10行）"):
         st.dataframe(detailed_df.head(10))
-    
-    # New file processing
-    st.header("🔄 新しいファイルの処理")
-    
-    if st.button("新しいファイルを処理する"):
-        # Clear session state
-        if 'processed' in st.session_state:
-            del st.session_state.processed
-        if 'parser' in st.session_state:
-            del st.session_state.parser
-        st.rerun()
