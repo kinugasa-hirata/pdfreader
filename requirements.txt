@@ -1,0 +1,100 @@
+# requirements.txt
+streamlit>=1.28.0
+pandas>=1.5.0
+PyPDF2>=3.0.0
+numpy>=1.24.0
+
+# Optional: for better performance
+openpyxl>=3.1.0
+
+---
+
+# Setup Instructions
+
+## 1. Install Python (if not already installed)
+Download Python 3.8 or higher from https://python.org
+
+## 2. Create a new folder for your project
+```bash
+mkdir cmm-parser
+cd cmm-parser
+```
+
+## 3. Create virtual environment (recommended)
+```bash
+# Windows
+python -m venv venv
+venv\Scripts\activate
+
+# macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
+```
+
+## 4. Save the requirements.txt file
+Copy the requirements content above into a file named "requirements.txt"
+
+## 5. Install required packages
+```bash
+pip install -r requirements.txt
+```
+
+## 6. Save the main application
+Save the Streamlit app code as "cmm_parser_app.py"
+
+## 7. Run the application
+```bash
+streamlit run cmm_parser_app.py
+```
+
+## 8. Access the application
+The app will automatically open in your browser at:
+http://localhost:8501
+
+---
+
+# Deployment Options
+
+## Option 1: Local Network Access
+To allow others on your network to access:
+```bash
+streamlit run cmm_parser_app.py --server.address 0.0.0.0
+```
+
+## Option 2: Streamlit Cloud (Free)
+1. Push your code to GitHub
+2. Go to https://share.streamlit.io
+3. Connect your GitHub repo
+4. Deploy for free!
+
+## Option 3: Other Hosting
+- Heroku
+- Railway
+- DigitalOcean
+- AWS/GCP/Azure
+
+---
+
+# Features Included
+
+✅ Web-based file upload interface
+✅ Real-time PDF processing 
+✅ Interactive data tables with filtering
+✅ Multiple export formats (Summary, Detailed, Tolerance Analysis)
+✅ Visual charts and metrics
+✅ Responsive design for mobile/desktop
+✅ Color-coded tolerance analysis (Pass/Fail)
+✅ Session state management
+✅ Error handling and user feedback
+✅ Direct CSV download to local folder
+
+---
+
+# Usage Instructions
+
+1. **Upload File**: Click "Choose a PDF file" and select your CMM report
+2. **Process**: Click "Process File" to parse the data
+3. **View Data**: Browse through Summary, Detailed, and Tolerance Analysis tabs
+4. **Filter**: Use dropdown filters to focus on specific elements or status
+5. **Export**: Click download buttons to save CSV files to your local folder
+6. **New File**: Click "Process New File" to upload and analyze another report
