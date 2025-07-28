@@ -221,10 +221,6 @@ def filtered_xy_parser(lines, use_japanese_columns=True, verbose=False):
             st.error("❌ No filtered XY coordinate records found")
         return pd.DataFrame()
 
-def convert_df_to_csv(df):
-    """Convert DataFrame to CSV string"""
-    return df.to_csv(index=False, encoding='utf-8-sig')
-
 def convert_df_to_excel(df):
     """Convert DataFrame to Excel bytes - GUARANTEED TO WORK"""
     output = io.BytesIO()
@@ -246,7 +242,7 @@ with st.sidebar:
     st.header("📋 使い方")
     st.markdown("1. PDFファイルをアップロード")
     st.markdown("2. Process Fileをクリック")
-    st.markdown("3. Excel/CSVをダウンロード")
+    st.markdown("3. Excelファイルをダウンロード")
     
     st.header("🎯 フィルタ対象")
     st.markdown("- **円1, 円2, 円3...** ✅")
@@ -325,35 +321,23 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
     # Display data
     st.dataframe(df, use_container_width=True)
     
-    # Download buttons
+    # Download button - Excel only
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     base_filename = st.session_state.filename.replace('.pdf', '')
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        csv_filename = f"CMM_Filtered_XY_{base_filename}_{timestamp}.csv"
+    excel_filename = f"CMM_Filtered_XY_{base_filename}_{timestamp}.xlsx"
+    excel_data = convert_df_to_excel(df)
+    if excel_data:
         st.download_button(
-            label="📥 CSV形式でダウンロード",
-            data=convert_df_to_csv(df),
-            file_name=csv_filename,
-            mime="text/csv",
-            type="primary"
+            label="📥 Excel形式でダウンロード",
+            data=excel_data,
+            file_name=excel_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+            use_container_width=True
         )
-    
-    with col2:
-        excel_filename = f"CMM_Filtered_XY_{base_filename}_{timestamp}.xlsx"
-        excel_data = convert_df_to_excel(df)
-        if excel_data:
-            st.download_button(
-                label="📥 Excel形式でダウンロード",
-                data=excel_data,
-                file_name=excel_filename,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary"
-            )
-        else:
-            st.error("❌ Excel変換エラー")
+    else:
+        st.error("❌ Excel変換エラー")
     
     # Data preview
     with st.expander("👀 データプレビュー (最初の10行)"):
@@ -362,5 +346,5 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
 # Footer
 st.markdown("---")
 st.markdown("**Version 2.0** - Focused & Fast: 円 and ｄ- elements only")
-st.markdown("**Excel Export:** ✅ Guaranteed to work")
+st.markdown("**Excel Export Only:** ✅ Simplified workflow")
 st.markdown("For support, contact: Hirata Trading Co., Ltd.")
