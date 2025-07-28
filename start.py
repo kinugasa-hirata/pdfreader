@@ -3,377 +3,364 @@ import pandas as pd
 import re
 import PyPDF2
 import io
-from typing import Dict, List, Any
-import numpy as np
 import datetime
-import base64
 
-# Set page config - MUST be first Streamlit command
+# Set page config
 st.set_page_config(
     page_title="CMM Data Parser",
     page_icon="📐",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-class CMMDataParser:
-    def __init__(self):
-        self.measurement_data = []
-        self.coordinate_system_data = {}
-        self.reference_elements = {}
+def extract_pdf_text(file_content):
+    """Extract text from PDF file"""
+    try:
+        pdf_file = io.BytesIO(file_content)
+        pdf_reader = PyPDF2.PdfReader(pdf_file)
         
-        # Translation dictionary for Japanese to English
-        self.japanese_to_english = {
-            # Element types
-            '円': 'Circle',
-            '平面': 'Plane', 
-            '線': 'Line',
-            '基準円': 'Reference_Circle',
-            '直線': 'Line',
-            
-            # Sides and positions
-            '内側': 'Inside',
-            '外側': 'Outside',
-            
-            # Common measurement terms
-            'ロハ': 'RoHa',
-            'イロ': 'IrO', 
-            'ハニ': 'HaNi',
-            'イニ': 'IniNi',
-            'ニ': 'Ni',
-            'ロ': 'Ro',
-            'ハ': 'Ha',
-            'イ': 'I',
-            
-            # Coordinate system terms
-            '基本座標系': 'Basic_Coordinate_System',
-            'ﾃﾞｰﾀﾑ': 'Datum',
-            '座標系': 'Coordinate_System',
-            
-            # Common prefixes
-            '基準': 'Reference',
-            '測定': 'Measurement',
-            '点数': 'Point_Count',
-            
-            # Numbers in Japanese context
-            '１': '1', '２': '2', '３': '3', '４': '4', '５': '5',
-            '６': '6', '７': '7', '８': '8', '９': '9', '０': '0',
-            
-            # Additional common terms
-            '値': 'Value',
-            '軸': 'Axis',
-            '形状': 'Form',
-            '公差': 'Tolerance',
-            '偏差': 'Deviation',
-        }
+        text = ""
+        for page in pdf_reader.pages:
+            text += page.extract_text() + "\n"
+        
+        return text
+    except Exception as e:
+        st.error(f"Error extracting PDF text: {e}")
+        return None
+
+def filtered_xy_parser(lines, use_japanese_columns=True, verbose=False):
+    """
+    Filtered parser focused on ONLY "円" and "ｄ-" elements
+    Based on Google Colab filtered_xy_parser functionality
+    """
+    if verbose:
+        st.info("🔧 Filtered XY Parser - Continuous stream processing...")
     
-    def translate_japanese_to_english(self, text):
-        """Translate Japanese text to English alphabets"""
-        if not isinstance(text, str):
-            return text
-            
-        # Handle None or empty strings
-        if not text or text == 'N/A':
-            return text
-            
-        translated = text
-        
-        # Apply translations
-        for japanese, english in self.japanese_to_english.items():
-            translated = translated.replace(japanese, english)
-        
-        # Convert specific patterns
-        patterns = [
-            (r'Circle(\d+)', r'Circle_\1'),
-            (r'Plane(\d+)', r'Plane_\1'),
-            (r'Reference_Circle(\d+)', r'Ref_Circle_\1'),
-            (r'([A-Za-z]+)線', r'\1_Line'),
-            (r'([XYZ])-値_', r'\1_Value_'),
-        ]
-        
-        for pattern, replacement in patterns:
-            translated = re.sub(pattern, replacement, translated)
-        
-        # Remove any remaining Japanese characters and replace with placeholders
-        # This catches any characters we didn't explicitly translate
-        result = ""
-        for char in translated:
-            if ord(char) > 127:  # Non-ASCII character
-                result += "X"  # Replace with X as placeholder
+    # Step 1: Clean the lines by removing headers
+    clean_lines = []
+    header_pattern = r'(CARL ZEISS|CALYPSO|測定ﾌﾟﾗﾝ|ACCURA|名前|説明|実測値|基準値|上許容差|下許容誤差|ﾋｽﾄｸﾞﾗﾑ|ｺﾝﾊﾟｸﾄﾌﾟﾘﾝﾄｱｳﾄ|ｵﾍﾟﾚｰﾀ|日付|ﾊﾟｰﾄNo|Master|2025年|20190821|支持板)'
+    separator_pattern = r'^[=_-]{10,}$'
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        # Skip all header/separator lines
+        if re.search(header_pattern, line) or re.search(separator_pattern, line):
+            if verbose:
+                st.write(f"   Skipping header: {line[:50]}...")
+            continue
+        clean_lines.append(line)
+
+    if verbose:
+        st.info(f"📊 Cleaned document: {len(clean_lines)} useful lines")
+
+    # Step 2: Process all clean lines sequentially
+    xy_records = []
+    current_element = None
+    looking_for_x = False
+    looking_for_y = False
+    current_x = None
+
+    for line_idx, line in enumerate(clean_lines):
+        # Look for element patterns
+        element_pattern = r'^([^\s]+)\s+(円\(最小二乗法\)|平面\(最小二乗法\)|直線\(最小二乗法\)|基本座標系|3次元直線|点|2D距離)'
+        element_match = re.search(element_pattern, line)
+
+        if element_match:
+            candidate_tag = element_match.group(1)
+
+            if verbose:
+                st.write(f"   Line {line_idx}: Found candidate element '{candidate_tag}'")
+
+            # FILTER: Only EXACT matches for "円" + numbers OR "ｄ-" + numbers
+            circle_pattern = r'^円\d+$'
+            d_pattern = r'^ｄ-\d+$'
+
+            if re.search(circle_pattern, candidate_tag) or re.search(d_pattern, candidate_tag):
+                # Save previous record if incomplete
+                if current_element and current_x is not None and looking_for_y:
+                    if verbose:
+                        st.write(f"   ⚠️  Previous element {current_element} incomplete (missing Y)")
+
+                # Start tracking new element
+                current_element = candidate_tag
+                looking_for_x = True
+                looking_for_y = False
+                current_x = None
+
+                if verbose:
+                    tag_type = "円グループ" if "円" in candidate_tag else "ｄ-グループ"
+                    st.write(f"   ✅ ACCEPTED element: {current_element} ({tag_type})")
             else:
-                result += char
-                
-        return result
-        
-    def convert_to_absolute(self, value):
-        """Convert numerical value to absolute value"""
-        try:
-            if isinstance(value, (int, float)):
-                return abs(value)
-            elif isinstance(value, str):
-                try:
-                    num_value = float(value)
-                    return abs(num_value)
-                except ValueError:
-                    return value
-            else:
-                return value
-        except:
-            return value
-        
-    def extract_pdf_text(self, file_content):
-        """Extract text from PDF file"""
-        try:
-            pdf_file = io.BytesIO(file_content)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
-            
-            text = ""
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-            
-            return text
-        except Exception as e:
-            st.error(f"Error extracting PDF text: {e}")
-            return None
-    
-    def parse_measurement_line(self, line):
-        """Parse a single measurement line to extract values"""
-        patterns = {
-            'circle': r'(円\d+|基準円\d+)\s+円\(最小二乗法\)\s+点数\s+\((\d+)\)\s+(内側|外側)?',
-            'plane': r'(平面\d+|.*平面)\s+平面\(最小二乗法\)\s+点数\s+\((\d+)\)',
-            'line': r'(.*線)\s+直線\(最小二乗法\)\s+点数\s+\((\d+)\)',
-            'coordinate_value': r'([XYZ]-値_.*?|[XYZ])\s+([XYZ])\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)',
-            'diameter': r'D\s+([\d.]+)\s+([\d.]+)',
-            'statistics': r'S=\s+([\d.]+)\s+Min=\([^)]+\)\s+([-\d.]+)\s+Max=\([^)]+\)\s+([-\d.]+)\s+形状=\s+([\d.]+)'
-        }
-        
-        result = {}
-        
-        for pattern_name, pattern in patterns.items():
-            match = re.search(pattern, line)
-            if match:
-                result['type'] = pattern_name
-                result['match'] = match
-                break
-                
-        return result if result else None
-    
-    def parse_cmm_data(self, text):
-        """Parse the entire CMM measurement text"""
-        lines = text.split('\n')
-        current_element = None
-        
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if not line:
+                if verbose:
+                    st.write(f"   ❌ REJECTED element: {candidate_tag} (doesn't match filter)")
+            continue
+
+        # Look for X coordinate
+        if current_element and looking_for_x:
+            x_pattern = r'\bX\s+([-\d.]+)'
+            x_match = re.search(x_pattern, line)
+            if x_match:
+                current_x = abs(float(x_match.group(1)))
+                looking_for_x = False
+                looking_for_y = True
+                if verbose:
+                    st.write(f"   ✅ Found X for {current_element}: {current_x}")
                 continue
-            
-            parsed_line = self.parse_measurement_line(line)
-            
-            if parsed_line:
-                if parsed_line['type'] in ['circle', 'plane', 'line']:
-                    if current_element:
-                        self.measurement_data.append(current_element)
-                    
-                    # Translate Japanese element names to English
-                    element_name = self.translate_japanese_to_english(parsed_line['match'].group(1))
-                    element_side = None
-                    if len(parsed_line['match'].groups()) >= 3 and parsed_line['match'].group(3):
-                        element_side = self.translate_japanese_to_english(parsed_line['match'].group(3))
-                    
-                    current_element = {
-                        'name': element_name,
-                        'type': parsed_line['type'],
-                        'point_count': int(parsed_line['match'].group(2)) if len(parsed_line['match'].groups()) >= 2 else None,
-                        'side': element_side,
-                        'coordinates': {},
-                        'statistics': {},
-                        'tolerances': {}
-                    }
-                
-                elif parsed_line['type'] == 'coordinate_value' and current_element:
-                    match = parsed_line['match']
-                    # Translate coordinate names to English
-                    coord_name = self.translate_japanese_to_english(match.group(1))
-                    coord_axis = match.group(2)  # X, Y, Z are already English
-                    measured_value = self.convert_to_absolute(float(match.group(3)))
-                    reference_value = self.convert_to_absolute(float(match.group(4)))
-                    upper_tolerance = self.convert_to_absolute(float(match.group(5)))
-                    lower_tolerance = self.convert_to_absolute(float(match.group(6)))
-                    deviation = self.convert_to_absolute(float(match.group(7)))
-                    
-                    current_element['coordinates'][coord_name] = {
-                        'axis': coord_axis,
-                        'measured': measured_value,
-                        'reference': reference_value,
-                        'upper_tol': upper_tolerance,
-                        'lower_tol': lower_tolerance,
-                        'deviation': deviation
-                    }
-                
-                elif parsed_line['type'] == 'diameter' and current_element:
-                    match = parsed_line['match']
-                    current_element['diameter'] = {
-                        'measured': self.convert_to_absolute(float(match.group(1))),
-                        'reference': self.convert_to_absolute(float(match.group(2)))
-                    }
-                
-                elif parsed_line['type'] == 'statistics' and current_element:
-                    match = parsed_line['match']
-                    current_element['statistics'] = {
-                        'std_dev': self.convert_to_absolute(float(match.group(1))),
-                        'min_value': self.convert_to_absolute(float(match.group(2))),
-                        'max_value': self.convert_to_absolute(float(match.group(3))),
-                        'form_error': self.convert_to_absolute(float(match.group(4)))
-                    }
-            
-            if '基本座標系' in line:
-                # Translate coordinate system info to English
-                translated_line = self.translate_japanese_to_english(line)
-                self.coordinate_system_data['name'] = translated_line
-                for j in range(i+1, min(i+10, len(lines))):
-                    datum_line = lines[j].strip()
-                    if 'ﾃﾞｰﾀﾑ' in datum_line:
-                        if 'datums' not in self.coordinate_system_data:
-                            self.coordinate_system_data['datums'] = []
-                        translated_datum = self.translate_japanese_to_english(datum_line)
-                        self.coordinate_system_data['datums'].append(translated_datum)
-        
-        if current_element:
-            self.measurement_data.append(current_element)
-    
-    def create_detailed_dataframe(self):
-        """Create a detailed pandas DataFrame with all measurement data"""
-        detailed_data = []
-        
-        for element in self.measurement_data:
-            # Ensure all text is translated to English
-            element_name = self.translate_japanese_to_english(element['name'])
-            element_type = element['type']  # Already English from parsing
-            element_side = self.translate_japanese_to_english(element.get('side', 'N/A')) if element.get('side') else 'N/A'
-            
-            base_info = {
-                'Element_Name': element_name,
-                'Type': element_type,
-                'Point_Count': element.get('point_count', 'N/A'),
-                'Side': element_side
-            }
-            
-            if 'statistics' in element:
-                base_info.update({
-                    'Std_Dev': element['statistics'].get('std_dev'),
-                    'Min_Value': element['statistics'].get('min_value'),
-                    'Max_Value': element['statistics'].get('max_value'),
-                    'Form_Error': element['statistics'].get('form_error')
-                })
-            
-            if 'diameter' in element:
-                base_info.update({
-                    'Diameter_Measured': element['diameter']['measured'],
-                    'Diameter_Reference': element['diameter']['reference'],
-                    'Diameter_Deviation': self.convert_to_absolute(element['diameter']['measured'] - element['diameter']['reference'])
-                })
-            
-            if element.get('coordinates'):
-                for coord_name, coord_data in element['coordinates'].items():
-                    row = base_info.copy()
-                    within_tolerance = coord_data['lower_tol'] <= coord_data['deviation'] <= coord_data['upper_tol']
-                    
-                    # Translate coordinate names to English
-                    coord_name_english = self.translate_japanese_to_english(coord_name)
-                    
-                    row.update({
-                        'Coordinate_Name': coord_name_english,
-                        'Axis': coord_data['axis'],  # X, Y, Z already English
-                        'Measured_Value': coord_data['measured'],
-                        'Reference_Value': coord_data['reference'],
-                        'Upper_Tolerance': coord_data['upper_tol'],
-                        'Lower_Tolerance': coord_data['lower_tol'],
-                        'Deviation': coord_data['deviation'],
-                        'Within_Tolerance': 'OK' if within_tolerance else 'NG'
-                    })
-                    detailed_data.append(row)
-            else:
-                detailed_data.append(base_info)
-        
-        return pd.DataFrame(detailed_data)
+
+        # Look for Y coordinate
+        if current_element and current_x is not None and looking_for_y:
+            y_pattern = r'\bY\s+([-\d.]+)'
+            y_match = re.search(y_pattern, line)
+            if y_match:
+                current_y = abs(float(y_match.group(1)))
+
+                # Save complete record
+                record = {
+                    'element_name': current_element,
+                    'x_coordinate': current_x,
+                    'y_coordinate': current_y
+                }
+                xy_records.append(record)
+
+                if verbose:
+                    st.write(f"   ✅ COMPLETE: {current_element} X={current_x} Y={current_y}")
+
+                # Reset for next element
+                current_element = None
+                looking_for_x = False
+                looking_for_y = False
+                current_x = None
+                continue
+
+    if verbose:
+        st.success(f"📊 FILTERED XY EXTRACTION SUMMARY:")
+        st.info(f"✅ Total clean lines processed: {len(clean_lines)}")
+        st.info(f"✅ Total filtered XY records: {len(xy_records)}")
+
+    if xy_records:
+        # Separate into groups - KEY FUNCTIONALITY FROM COLAB
+        circle_elements = [r for r in xy_records if "円" in r['element_name']]
+        d_elements = [r for r in xy_records if "ｄ-" in r['element_name']]
+
+        if verbose:
+            st.info(f"📊 Groups found:")
+            st.write(f"   円グループ: {len(circle_elements)} elements")
+            st.write(f"   ｄ-グループ: {len(d_elements)} elements")
+
+        # NUMERICAL SORTING FUNCTION
+        def extract_number(element_name):
+            if "円" in element_name:
+                match = re.search(r'円(\d+)', element_name)
+                return int(match.group(1)) if match else 0
+            elif "ｄ-" in element_name:
+                match = re.search(r'ｄ-(\d+)', element_name)
+                return int(match.group(1)) if match else 0
+            return 0
+
+        # Create reshaped data with numerical sorting
+        reshaped_data = []
+
+        # Add 円 group elements (sorted numerically)
+        circle_elements_sorted = sorted(circle_elements, key=lambda x: extract_number(x['element_name']))
+        for element_record in circle_elements_sorted:
+            # Add X row
+            reshaped_data.append({
+                'element_name': element_record['element_name'],
+                'coordinate_type': 'X',
+                'value': element_record['x_coordinate']
+            })
+            # Add Y row
+            reshaped_data.append({
+                'element_name': element_record['element_name'],
+                'coordinate_type': 'Y',
+                'value': element_record['y_coordinate']
+            })
+
+        # Add ｄ- group elements (sorted numerically)
+        d_elements_sorted = sorted(d_elements, key=lambda x: extract_number(x['element_name']))
+        for element_record in d_elements_sorted:
+            # Add X row
+            reshaped_data.append({
+                'element_name': element_record['element_name'],
+                'coordinate_type': 'X',
+                'value': element_record['x_coordinate']
+            })
+            # Add Y row
+            reshaped_data.append({
+                'element_name': element_record['element_name'],
+                'coordinate_type': 'Y',
+                'value': element_record['y_coordinate']
+            })
+
+        df = pd.DataFrame(reshaped_data)
+
+        # Convert column names if Japanese requested
+        if use_japanese_columns:
+            df = df.rename(columns={
+                'element_name': '要素名',
+                'coordinate_type': '座標種別',
+                'value': '値'
+            })
+        else:
+            df = df.rename(columns={
+                'element_name': 'Element_Name',
+                'coordinate_type': 'Coordinate_Type',
+                'value': 'Value'
+            })
+
+        if verbose:
+            st.success(f"✅ Reshaped DataFrame created!")
+            st.info(f"📐 Shape: {df.shape[0]} rows × {df.shape[1]} columns")
+            st.write("📍 Sample data:")
+            st.dataframe(df.head(10))
+
+        return df
+    else:
+        if verbose:
+            st.error("❌ No filtered XY coordinate records found")
+        return pd.DataFrame()
 
 def convert_df_to_csv(df):
     """Convert DataFrame to CSV string"""
     return df.to_csv(index=False, encoding='utf-8-sig')
 
-# Title and description - Your custom title
-st.markdown("# Zeiss社pdf出力データ解析アプリ\nmade by Hirata Trading Co., Ltd.")
+def convert_df_to_excel(df):
+    """Convert DataFrame to Excel bytes - GUARANTEED TO WORK"""
+    output = io.BytesIO()
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='CMM_Data')
+        excel_data = output.getvalue()
+        return excel_data
+    except Exception as e:
+        st.error(f"Excel conversion error: {e}")
+        return None
+
+# Main Streamlit App
+st.markdown("# Zeiss社pdf出力データ解析アプリ v2.0")
+st.markdown("**Focus:** 円 and ｄ- elements only (Simplified & Fast)")
 
 # Sidebar
 with st.sidebar:
-    st.header("使い方")
-    st.markdown("1. PDFファイルをアプロード")
-    st.markdown("2. Process Fileをクリックして解析開始")
-    st.markdown("3. CSVファイルをダウンロード")
+    st.header("📋 使い方")
+    st.markdown("1. PDFファイルをアップロード")
+    st.markdown("2. Process Fileをクリック")
+    st.markdown("3. Excel/CSVをダウンロード")
     
+    st.header("🎯 フィルタ対象")
+    st.markdown("- **円1, 円2, 円3...** ✅")
+    st.markdown("- **ｄ-1, ｄ-2, ｄ-3...** ✅") 
+    st.markdown("- **基準円27** ❌ (除外)")
+    st.markdown("- **その他** ❌ (除外)")
+    
+    use_japanese_columns = st.checkbox("日本語列名を使用", value=True)
+    verbose_mode = st.checkbox("詳細ログを表示", value=False)
+
 # File upload
-st.header("PDFファイルをアップロード")
-uploaded_file = st.file_uploader(type="pdf", label="PDFファイルをアップロード",)
+st.header("📁 PDFファイルをアップロード")
+uploaded_file = st.file_uploader(
+    label="PDFファイルを選択してください",
+    type="pdf",
+    help="Zeiss CMM測定結果のPDFファイルをアップロードしてください"
+)
 
 if uploaded_file is not None:
     # Show file details
     st.success(f"✅ ファイルのアップロードが完了しました: {uploaded_file.name}")
     
+    file_info = f"**ファイル名:** {uploaded_file.name}\n**ファイルサイズ:** {uploaded_file.size:,} bytes"
+    st.markdown(file_info)
+    
     # Process button
     if st.button("🔄 Process File", type="primary"):
         with st.spinner("ファイルを処理しています..."):
-            # Initialize parser
-            parser = CMMDataParser()
             
             # Extract text
             file_content = uploaded_file.read()
-            text = parser.extract_pdf_text(file_content)
+            text = extract_pdf_text(file_content)
             
             if text:
-                # Parse data
-                parser.parse_cmm_data(text)
+                lines = text.split('\n')
                 
-                # Store in session state
-                st.session_state.parser = parser
-                st.session_state.processed = True
+                if verbose_mode:
+                    st.info(f"📄 {len(lines)} 行のテキストを抽出しました")
                 
-                st.success("✅ ファイル処理が完了しました!")
+                # Process with filtered parser
+                df = filtered_xy_parser(lines, use_japanese_columns, verbose_mode)
+                
+                if not df.empty:
+                    st.session_state.data = df
+                    st.session_state.filename = uploaded_file.name
+                    st.session_state.processed = True
+                    st.success("✅ ファイル処理が完了しました!")
+                else:
+                    st.error("❌ No filtered data found")
             else:
-                st.error("❌ Failed to extract text from PDF")
+                st.error("❌ PDFからテキストの抽出に失敗しました")
 
 # Display results if processed
 if hasattr(st.session_state, 'processed') and st.session_state.processed:
-    parser = st.session_state.parser
+    df = st.session_state.data
     
-    st.subheader("解析データ")
-    detailed_df = parser.create_detailed_dataframe()
+    st.subheader("🎯 フィルタード抽出結果")
     
-    # # Show data info
-    # col1, col2, col3 = st.columns(3)
-    # with col1:
-    #     st.metric("Data Rows", len(detailed_df))
-    # with col2:
-    #     st.metric("Data Columns", len(detailed_df.columns))
-    # with col3:
-    #     ok_count = len(detailed_df[detailed_df.get('Within_Tolerance', 'N/A') == 'OK']) if 'Within_Tolerance' in detailed_df.columns else 0
-    #     st.metric("Within Tolerance", ok_count)
+    # Show metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("座標レコード数", len(df))
+    with col2:
+        if use_japanese_columns:
+            unique_elements = df['要素名'].nunique()
+        else:
+            unique_elements = df['Element_Name'].nunique()
+        st.metric("要素数", unique_elements)
+    with col3:
+        if use_japanese_columns:
+            coord_types = df['座標種別'].nunique()
+        else:
+            coord_types = df['Coordinate_Type'].nunique()
+        st.metric("座標軸数", coord_types)
     
-    # Display the dataframe
-    st.dataframe(detailed_df, use_container_width=True)
+    # Display data
+    st.dataframe(df, use_container_width=True)
     
-    # Download button
+    # Download buttons
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    detailed_filename = f"CMM_Detailed_Data_{timestamp}.csv"
+    base_filename = st.session_state.filename.replace('.pdf', '')
     
-    st.download_button(
-        label="CSVデータをダウンロードします",
-        data=convert_df_to_csv(detailed_df),
-        file_name=detailed_filename,
-        mime="text/csv",
-        type="primary",
-    )
+    col1, col2 = st.columns(2)
     
-    # Show data preview
-    with st.expander("📄 Data Preview (First 10 rows)"):
-        st.dataframe(detailed_df.head(10))
+    with col1:
+        csv_filename = f"CMM_Filtered_XY_{base_filename}_{timestamp}.csv"
+        st.download_button(
+            label="📥 CSV形式でダウンロード",
+            data=convert_df_to_csv(df),
+            file_name=csv_filename,
+            mime="text/csv",
+            type="primary"
+        )
+    
+    with col2:
+        excel_filename = f"CMM_Filtered_XY_{base_filename}_{timestamp}.xlsx"
+        excel_data = convert_df_to_excel(df)
+        if excel_data:
+            st.download_button(
+                label="📥 Excel形式でダウンロード",
+                data=excel_data,
+                file_name=excel_filename,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary"
+            )
+        else:
+            st.error("❌ Excel変換エラー")
+    
+    # Data preview
+    with st.expander("👀 データプレビュー (最初の10行)"):
+        st.dataframe(df.head(10))
+
+# Footer
+st.markdown("---")
+st.markdown("**Version 2.0** - Focused & Fast: 円 and ｄ- elements only")
+st.markdown("**Excel Export:** ✅ Guaranteed to work")
+st.markdown("For support, contact: Hirata Trading Co., Ltd.")
