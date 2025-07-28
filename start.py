@@ -235,7 +235,6 @@ def convert_df_to_excel(df):
 
 # Main Streamlit App
 st.markdown("# Zeiss社pdf出力データ解析アプリ v2.0")
-st.markdown("**Focus:** 円 and ｄ- elements only (Simplified & Fast)")
 
 # Sidebar
 with st.sidebar:
@@ -345,6 +344,4 @@ if hasattr(st.session_state, 'processed') and st.session_state.processed:
 
 # Footer
 st.markdown("---")
-st.markdown("**Version 2.0** - Focused & Fast: 円 and ｄ- elements only")
-st.markdown("**Excel Export Only:** ✅ Simplified workflow")
 st.markdown("For support, contact: Hirata Trading Co., Ltd.")
